@@ -1,0 +1,281 @@
+#+TITLE: 第4回 Functional忍者 Option → Try → Future
+#+AUTHOR: Yasuyuki Maeda(@maeda_)
+#+OPTIONS: ^:{}
+#+STYLE: <link rel="stylesheet" type="text/css" href="org-mode-document.css" />
+#+LANGUAGE: ja
+
+* 今日の概要
+Option[A]/Try[A]/Future[A]は一つのA型の値を抱えるコンテナです。
+
+| 型        | 説明                                                                                | ScalaDoc                                                       |
+| Option[A] | A型の値を持っている。でも、持ってないかもしれない                                   | http://www.scala-lang.org/api/current/#scala.Option            |
+| Try[A]    | うまくいったら、A型の値を持っている。失敗してる場合、失敗についての情報を持っている | http://www.scala-lang.org/api/current/#scala.util.Try          |
+| Future[A] | そのうちA型の値を持つかもしれない。失敗するかもしれない                             | http://www.scala-lang.org/api/current/#scala.concurrent.Future |
+
+Optionを使いこなすことができれば、TryやFutureへの発展は簡単です。Optionに重点をおいて、Try、Futureも説明をします。
+
+** 注意
+サブクラスがある都合でシグネチャが分かりにくくなるところは、適当に書き換えてます。
+
+* Option
+** 型の定義
+Option[A]型の値はSome(値あり)かNone(値なし)のいずれかの型になる。
+
+#+BEGIN_SRC scala
+sealed trait Option[+A]
+case class Some[+A](x: A) extends Option[A]
+case object None         extends Option[Nothing]
+#+END_SRC
+
+** Map[A,B]でのOptionの例（Aがキーの型、Bが値の型）
+Mapにkeyを渡して、valueを取得するgetメソッドは下記のシグネチャになっている。
+Mapにkeyに対応する値があればSome(value)、なければNoneを返す。
+（型をみれば、値がないことがありうることが分かってうれしい）
+
+#+BEGIN_SRC scala
+// Mapの定義
+trait Map[A,B] {
+  def get(key: A): Option[B]
+}
+
+// 実行例
+val dict = Map("one" -> 1, "two" -> 2)
+dict.get("one")			// -> Some(1):Option[Int]
+dict.get("three")			// -> None:Option[Int]
+#+END_SRC
+
+** 大事なメソッド
+*** def map[B](f: A => B): Option[B]
+中に抱えている値を変換する時に使う。中の値がない場合（レシーバがNoneの場合）はNoneを返す。
+
+#+BEGIN_SRC scala
+val dict:Map[String, Int] = Map("one" -> 1, "two" -> 2)
+
+def stringSucc(strNum: String):Option[Int] = {
+  val num = dict.get(num)
+  num.map(_ + 1)
+}
+
+stringSucc("one")      // Some(2)
+stringSucc("unknown")  // None
+#+END_SRC
+
+*** def flatMap[B](f: A => Option[B]): Option[B]
+Optionがネストするようなケースで使う。
+例えば、２つのOption型の値があり、その両方がSomeのときにそれぞれの中の値を使って何かしたい。どちらか一方でもNoneならばNoneを返す。
+
+#+BEGIN_SRC scala
+val dict = Map("one" -> 1, "two" -> 2)
+
+def stringAdd(x: String, y: String):Option[Int] = {
+  val optX = dict.get(x)
+  val optY = dict.get(y)
+  optX.flatMap{ a =>  // このflatMapをmapにするとOption[Option[Int]]になるので、flattenが必要になる。map + flatten = flatMap
+    optY.map{ b =>
+      a + b
+    }
+  }
+}
+
+stringAdd("one", "two")         // Some(3)
+stringAdd("one", "unknown")     // None
+#+END_SRC
+
+** for内包表記(for comprehension)
+先のflatMapやmapを使ったstringAddの例は高階関数がネストしていて読みにくい。
+下記のようにfor内包表記を使うとすっきり書ける。(for内包表記はflatMap, mapの糖衣構文)
+
+#+BEGIN_SRC scala
+def stringAdd(x: String, y: String):Option[Int] = 
+  for {
+    a <- dict.get(x)                     // この行はflatMapに変換される
+    b <- dict.get(y)                     // 最後はmapに変換される
+  } yield a + b
+#+END_SRC
+
+矢印（<-）の右側をOption[X]型の式にすると、矢印の左側の変数に中に抱えている値が入る。
+矢印の右側のOptionのうち、ひとつでもNoneがあると全体がNoneになる。
+
+#+BEGIN_SRC scala
+for {
+  x <- (Option[X]型の式)
+  // ここより下ではxを参照すれば中の値が使える
+  y <- (Option[Y]型の式)
+  // ここより下でyが...
+  z <- (Option[Z]型の式)
+} yield ... (ここでは、x,y,zが使える) ...
+#+END_SRC
+
+** Lifting(持ち上げ)
+- T型の値をOption[T]型にすることをOptionの文脈(context)にliftする（持ち上げる）、という
+- 逆にOption[T]型からT型にすることを文脈からunliftする（日本語訳を知らない）、という
+
+パターンマッチやgetOrElseメソッドなどを使うことでunliftできる。
+つまり、Optionの文脈から出るには、Option[T]がNoneの場合にT型の値をどう作るかが必要になる。
+(型が正しい実装を要求してくる。うれしい)
+
+値があるかないか分からないという文脈の中で、あるなら何かするけど、ないなら何もしない、
+という場合は結果もOption型になる。
+こういう場合は、mapやflatMapなどのメソッドを使うと、liftしたまま処理を記述できる。
+for内包表記を使う事で、mapやflatMapの処理が裏に隠されて、その型の文脈での処理を素直に書ける。
+
+** その他のメソッド
+*** def filter(p: A => Boolean): Option[A]
+特定の条件で、中に抱えている値を捨てる時に使う。
+
+#+BEGIN_SRC scala
+val dict:Map[String, Int] = Map("one" -> 1, "two" -> 2)
+def onlyEven(x: String) = dict.get(x).filter(_ % 2 == 0)
+#+END_SRC
+
+*** def getOrElse(default: => A): A
+中の値を取り出す。中の値がない場合は引数で渡された値を返す。
+引数は名前渡しなので、レシーバがNoneの場合のみ実行される。
+
+#+BEGIN_SRC scala
+val cache = Map(1 -> "one", 2 -> "two")
+def heavyProcess(x:Int):String = {
+  Thread.sleep(3000)
+  x.toString
+}
+def getWithCache(x:Int):String = cache.get(x).getOrElse(heavyProcess(x))
+#+END_SRC
+
+*** nullになりうるT型の値をOption[A]にする
+Option(x)とするとxがnullの場合None、それ以外はSome(x)になる
+
+#+BEGIN_SRC scala
+val dict = Map(1 -> "one", 2 -> "two")
+import scala.collection.JavaConverters._
+val javaDict = dict.asJava
+
+javaDict.get(3)
+Option(javaDict.get(3))
+Option(javaDict.get(1))
+#+END_SRC
+
+** 演習
+下記のコードのgenerate_simpleとgenerate_complexをOptionを使って、リファクタリングしてください。
+紹介したメソッド以外にも便利なメソッドがあります。ScalaDocを参照してください。
+コードはgithubにあります。 → http://github.com/maedaunderscore/ninja-future/
+
+#+BEGIN_SRC scala
+object Main {
+  sealed trait Emotion
+  case object Love extends Emotion
+  case object Hate extends Emotion
+
+  type User = String
+
+  class Conversation(
+    affinity: Map[(User, User), Emotion],
+    message: Map[(User, Emotion), String]
+  ){
+    def generate_simple(u1: User, u2: User): Option[String] = {
+      if(affinity.contains((u1, u2))){
+        val emotion = affinity((u1, u2))
+        if(message.contains((u1, emotion))){
+          Some(template(u1, u2, message((u1, emotion))))
+        } else None
+      } else None
+    }
+
+    def generate_complex(u1: User, u2: User): Option[String] = {
+      if(affinity.contains((u1, u2)) && affinity.contains((u2, u1))){
+        val emotion1 = affinity((u1, u2))
+        val emotion2 = affinity((u2, u1))
+        if(emotion1 == emotion2) {
+          if(message.contains((u1, inverse(emotion1)))){
+            Some(template(u1, u2, message((u1, inverse(emotion1)))))
+          }else if(message.contains((u1, emotion1))){
+            Some(template(u1, u2, message((u1, emotion1))))
+          }else None
+        } else None
+      } else None
+    }
+
+    private def template(u1: User, u2: User, msg: String) = s"$u2「$msg？」\n$u1「$msg！」"
+
+    private def inverse(e: Emotion) = e match {
+      case Love => Hate
+      case Hate => Love
+    }
+  }
+}
+#+END_SRC
+
+* Try
+** 定義
+
+#+BEGIN_SRC scala
+package scala.util
+
+sealed trait Try[+A]
+case class Success[+A](x: A)         extends Try[A]
+case class Failure[+A](ex: Throwable)  extends Try[A]
+#+END_SRC
+
+map, flatMap, filterはOptionと同じように使える。
+
+** 演習
+1. Try型のmap, flatMap,filterの動作を確認しましょう。
+
+2. Map[A,B]#get(key:A):Option[B]メソッドについて、戻り値がTry[B]のバージョンの関数を作りましょう。
+
+3. 先のOptionの演習で、Optionの代わりにTryを使って、なぜ失敗したのかの理由を残すようにしましょう。
+
+* Future
+** Futureの値の作り方(ヘルパを使う)
+#+BEGIN_SRC scala
+import scala.concurrent._
+
+// Future型の演算をする場合はExecutionContextの宣言が必要。
+import scala.concurrent.ExecutionContext.Implicits.global
+
+def x : Future[Int] = future {
+  val wait = scala.util.Random.nextInt(4) + 1
+  Thread.sleep(wait * 1000)
+  wait
+}
+
+// 同期して値を取得（うれしくない）
+import scala.concurrent.duration._
+Await.result(x, 10 seconds)  // 最大10秒待つ。
+
+
+// 非同期で処理(うれしい)
+// def onComplete(f: Try[A] => Unit):Unit
+x.onComplete(println)
+
+// map, flatMap, filterも非同期で動く
+x.map{x => s"it took ${x} seconds"}.onComplete(println) 
+#+END_SRC
+
+** Futureの値の作り方（Promiseを使う）
+Promise[A]からFuture[A]を生成できる。Promise.successまたはPromise.failureに値を渡すと、
+生成したFutureの値が確定する
+
+#+BEGIN_SRC scala
+val promise = Promise[Int]()
+val x = promise.future
+x.isCompleted
+promise.success(3)
+x.isCompleted
+x.value
+#+END_SRC
+
+** 演習
+1. Future型のmap, flatMap, filterの動作を確認しましょう。
+
+2. Future型の値をunliftするにはどうすればよいですか？ Futureからunliftすることは何を意味しますか？
+
+3. Map#getメソッドについて、Future型で返すバージョンを作りましょう。
+   ランダム秒のsleepを入れて、非同期感を演出してください。
+
+4. 先のTryの演習について、Tryの代わりにFutureを使って、非同期に処理をするようにしましょう。
+   Mapから値を取り出す際には、3.で作成した関数を使って時間がかかるようにしてください。
+   FutureはorElseメソッドはありません。２つのFutureを引数にして先に成功/失敗した方のFutureを返す関数を作って置き換えてください。
+
+5. 4.について、どの処理が非同期に実行されるか、考えてみてください。
+   また、sleepの前後にログを仕込んで実際の動作を確認してください。
+

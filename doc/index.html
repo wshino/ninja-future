@@ -1,0 +1,654 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+               "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ja" xml:lang="ja">
+<head>
+<title>第4回 Functional忍者 Option → Try → Future</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+<meta name="title" content="第4回 Functional忍者 Option → Try → Future"/>
+<meta name="generator" content="Org-mode"/>
+<meta name="generated" content="2013-12-09 17:58:31 JST"/>
+<meta name="author" content="Yasuyuki Maeda(@maeda_)"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  html { font-family: Times, serif; font-size: 12pt; }
+  .title  { text-align: center; }
+  .todo   { color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #add8e6; font-weight:normal }
+  .target { }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .right  {margin-left:auto; margin-right:0px;  text-align:right;}
+  .left   {margin-left:0px;  margin-right:auto; text-align:left;}
+  .center {margin-left:auto; margin-right:auto; text-align:center;}
+  p.verse { margin-left: 3% }
+  pre {
+	border: 1pt solid #AEBDCC;
+	background-color: #F3F5F7;
+	padding: 5pt;
+	font-family: courier, monospace;
+        font-size: 90%;
+        overflow:auto;
+  }
+  table { border-collapse: collapse; }
+  td, th { vertical-align: top;  }
+  th.right  { text-align:center;  }
+  th.left   { text-align:center;   }
+  th.center { text-align:center; }
+  td.right  { text-align:right;  }
+  td.left   { text-align:left;   }
+  td.center { text-align:center; }
+  dt { font-weight: bold; }
+  div.figure { padding: 0.5em; }
+  div.figure p { text-align: center; }
+  div.inlinetask {
+    padding:10px;
+    border:2px solid gray;
+    margin:10px;
+    background: #ffffcc;
+  }
+  textarea { overflow-x: auto; }
+  .linenr { font-size:smaller }
+  .code-highlighted {background-color:#ffff00;}
+  .org-info-js_info-navigation { border-style:none; }
+  #org-info-js_console-label { font-size:10px; font-weight:bold;
+                               white-space:nowrap; }
+  .org-info-js_search-highlight {background-color:#ffff00; color:#000000;
+                                 font-weight:bold; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="org-mode-document.css" />
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+
+</head>
+<body>
+
+<div id="preamble">
+
+</div>
+
+<div id="content">
+<h1 class="title">第4回 Functional忍者 Option → Try → Future</h1>
+
+
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">1 今日の概要</a>
+<ul>
+<li><a href="#sec-1-1">1.1 注意</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">2 Option</a>
+<ul>
+<li><a href="#sec-2-1">2.1 型の定義</a></li>
+<li><a href="#sec-2-2">2.2 Map[A,B]でのOptionの例（Aがキーの型、Bが値の型）</a></li>
+<li><a href="#sec-2-3">2.3 大事なメソッド</a>
+<ul>
+<li><a href="#sec-2-3-1">2.3.1 def map[B](f: A =&gt; B): Option[B]</a></li>
+<li><a href="#sec-2-3-2">2.3.2 def flatMap[B](f: A =&gt; Option[B]): Option[B]</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-4">2.4 for内包表記(for comprehension)</a></li>
+<li><a href="#sec-2-5">2.5 Lifting(持ち上げ)</a></li>
+<li><a href="#sec-2-6">2.6 その他のメソッド</a>
+<ul>
+<li><a href="#sec-2-6-1">2.6.1 def filter(p: A =&gt; Boolean): Option[A]</a></li>
+<li><a href="#sec-2-6-2">2.6.2 def getOrElse(default: =&gt; A): A</a></li>
+<li><a href="#sec-2-6-3">2.6.3 nullになりうるT型の値をOption[A]にする</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-7">2.7 演習</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">3 Try</a>
+<ul>
+<li><a href="#sec-3-1">3.1 定義</a></li>
+<li><a href="#sec-3-2">3.2 演習</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">4 Future</a>
+<ul>
+<li><a href="#sec-4-1">4.1 Futureの値の作り方(ヘルパを使う)</a></li>
+<li><a href="#sec-4-2">4.2 Futureの値の作り方（Promiseを使う）</a></li>
+<li><a href="#sec-4-3">4.3 演習</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-1" class="outline-2">
+<h2 id="sec-1"><span class="section-number-2">1</span> 今日の概要</h2>
+<div class="outline-text-2" id="text-1">
+
+<p>Option[A]/Try[A]/Future[A]は一つのA型の値を抱えるコンテナです。
+</p>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+<caption></caption>
+<colgroup><col class="left" /><col class="left" /><col class="left" />
+</colgroup>
+<tbody>
+<tr><td class="left">型</td><td class="left">説明</td><td class="left">ScalaDoc</td></tr>
+<tr><td class="left">Option[A]</td><td class="left">A型の値を持っている。でも、持ってないかもしれない</td><td class="left"><a href="http://www.scala-lang.org/api/current/#scala.Option">http://www.scala-lang.org/api/current/#scala.Option</a></td></tr>
+<tr><td class="left">Try[A]</td><td class="left">うまくいったら、A型の値を持っている。失敗してる場合、失敗についての情報を持っている</td><td class="left"><a href="http://www.scala-lang.org/api/current/#scala.util.Try">http://www.scala-lang.org/api/current/#scala.util.Try</a></td></tr>
+<tr><td class="left">Future[A]</td><td class="left">そのうちA型の値を持つかもしれない。失敗するかもしれない</td><td class="left"><a href="http://www.scala-lang.org/api/current/#scala.concurrent.Future">http://www.scala-lang.org/api/current/#scala.concurrent.Future</a></td></tr>
+</tbody>
+</table>
+
+
+<p>
+Optionを使いこなすことができれば、TryやFutureへの発展は簡単です。Optionに重点をおいて、Try、Futureも説明をします。
+</p>
+
+</div>
+
+<div id="outline-container-1-1" class="outline-3">
+<h3 id="sec-1-1"><span class="section-number-3">1.1</span> 注意</h3>
+<div class="outline-text-3" id="text-1-1">
+
+<p>サブクラスがある都合でシグネチャが分かりにくくなるところは、適当に書き換えてます。
+</p>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-2" class="outline-2">
+<h2 id="sec-2"><span class="section-number-2">2</span> Option</h2>
+<div class="outline-text-2" id="text-2">
+
+
+</div>
+
+<div id="outline-container-2-1" class="outline-3">
+<h3 id="sec-2-1"><span class="section-number-3">2.1</span> 型の定義</h3>
+<div class="outline-text-3" id="text-2-1">
+
+<p>Option[A]型の値はSome(値あり)かNone(値なし)のいずれかの型になる。
+</p>
+
+
+
+<pre class="example">sealed trait Option[+A]
+case class Some[+A](x: A) extends Option[A]
+case object None         extends Option[Nothing]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-2" class="outline-3">
+<h3 id="sec-2-2"><span class="section-number-3">2.2</span> Map[A,B]でのOptionの例（Aがキーの型、Bが値の型）</h3>
+<div class="outline-text-3" id="text-2-2">
+
+<p>Mapにkeyを渡して、valueを取得するgetメソッドは下記のシグネチャになっている。
+Mapにkeyに対応する値があればSome(value)、なければNoneを返す。
+（型をみれば、値がないことがありうることが分かってうれしい）
+</p>
+
+
+
+<pre class="example">// Mapの定義
+trait Map[A,B] {
+  def get(key: A): Option[B]
+}
+
+// 実行例
+val dict = Map("one" -&gt; 1, "two" -&gt; 2)
+dict.get("one")         // -&gt; Some(1):Option[Int]
+dict.get("three")           // -&gt; None:Option[Int]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-3" class="outline-3">
+<h3 id="sec-2-3"><span class="section-number-3">2.3</span> 大事なメソッド</h3>
+<div class="outline-text-3" id="text-2-3">
+
+
+</div>
+
+<div id="outline-container-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1"><span class="section-number-4">2.3.1</span> def map[B](f: A =&gt; B): Option[B]</h4>
+<div class="outline-text-4" id="text-2-3-1">
+
+<p>中に抱えている値を変換する時に使う。中の値がない場合（レシーバがNoneの場合）はNoneを返す。
+</p>
+
+
+
+<pre class="example">val dict:Map[String, Int] = Map("one" -&gt; 1, "two" -&gt; 2)
+
+def stringSucc(strNum: String):Option[Int] = {
+  val num = dict.get(num)
+  num.map(_ + 1)
+}
+
+stringSucc("one")      // Some(2)
+stringSucc("unknown")  // None
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2"><span class="section-number-4">2.3.2</span> def flatMap[B](f: A =&gt; Option[B]): Option[B]</h4>
+<div class="outline-text-4" id="text-2-3-2">
+
+<p>Optionがネストするようなケースで使う。
+例えば、２つのOption型の値があり、その両方がSomeのときにそれぞれの中の値を使って何かしたい。どちらか一方でもNoneならばNoneを返す。
+</p>
+
+
+
+<pre class="example">val dict = Map("one" -&gt; 1, "two" -&gt; 2)
+
+def stringAdd(x: String, y: String):Option[Int] = {
+  val optX = dict.get(x)
+  val optY = dict.get(y)
+  optX.flatMap{ a =&gt;  // このflatMapをmapにするとOption[Option[Int]]になるので、flattenが必要になる。map + flatten = flatMap
+    optY.map{ b =&gt;
+      a + b
+    }
+  }
+}
+
+stringAdd("one", "two")         // Some(3)
+stringAdd("one", "unknown")     // None
+</pre>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-2-4" class="outline-3">
+<h3 id="sec-2-4"><span class="section-number-3">2.4</span> for内包表記(for comprehension)</h3>
+<div class="outline-text-3" id="text-2-4">
+
+<p>先のflatMapやmapを使ったstringAddの例は高階関数がネストしていて読みにくい。
+下記のようにfor内包表記を使うとすっきり書ける。(for内包表記はflatMap, mapの糖衣構文)
+</p>
+
+
+
+<pre class="example">def stringAdd(x: String, y: String):Option[Int] = 
+  for {
+    a &lt;- dict.get(x)                     // この行はflatMapに変換される
+    b &lt;- dict.get(y)                     // 最後はmapに変換される
+  } yield a + b
+</pre>
+
+
+<p>
+矢印（&lt;-）の右側をOption[X]型の式にすると、矢印の左側の変数に中に抱えている値が入る。
+矢印の右側のOptionのうち、ひとつでもNoneがあると全体がNoneになる。
+</p>
+
+
+
+<pre class="example">for {
+  x &lt;- (Option[X]型の式)
+  // ここより下ではxを参照すれば中の値が使える
+  y &lt;- (Option[Y]型の式)
+  // ここより下でyが...
+  z &lt;- (Option[Z]型の式)
+} yield ... (ここでは、x,y,zが使える) ...
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-5" class="outline-3">
+<h3 id="sec-2-5"><span class="section-number-3">2.5</span> Lifting(持ち上げ)</h3>
+<div class="outline-text-3" id="text-2-5">
+
+<ul>
+<li>T型の値をOption[T]型にすることをOptionの文脈(context)にliftする（持ち上げる）、という
+</li>
+<li>逆にOption[T]型からT型にすることを文脈からunliftする（日本語訳を知らない）、という
+</li>
+</ul>
+
+
+<p>
+パターンマッチやgetOrElseメソッドなどを使うことでunliftできる。
+つまり、Optionの文脈から出るには、Option[T]がNoneの場合にT型の値をどう作るかが必要になる。
+(型が正しい実装を要求してくる。うれしい)
+</p>
+<p>
+値があるかないか分からないという文脈の中で、あるなら何かするけど、ないなら何もしない、
+という場合は結果もOption型になる。
+こういう場合は、mapやflatMapなどのメソッドを使うと、liftしたまま処理を記述できる。
+for内包表記を使う事で、mapやflatMapの処理が裏に隠されて、その型の文脈での処理を素直に書ける。
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-2-6" class="outline-3">
+<h3 id="sec-2-6"><span class="section-number-3">2.6</span> その他のメソッド</h3>
+<div class="outline-text-3" id="text-2-6">
+
+
+</div>
+
+<div id="outline-container-2-6-1" class="outline-4">
+<h4 id="sec-2-6-1"><span class="section-number-4">2.6.1</span> def filter(p: A =&gt; Boolean): Option[A]</h4>
+<div class="outline-text-4" id="text-2-6-1">
+
+<p>特定の条件で、中に抱えている値を捨てる時に使う。
+</p>
+
+
+
+<pre class="example">val dict:Map[String, Int] = Map("one" -&gt; 1, "two" -&gt; 2)
+def onlyEven(x: String) = dict.get(x).filter(_ % 2 == 0)
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-6-2" class="outline-4">
+<h4 id="sec-2-6-2"><span class="section-number-4">2.6.2</span> def getOrElse(default: =&gt; A): A</h4>
+<div class="outline-text-4" id="text-2-6-2">
+
+<p>中の値を取り出す。中の値がない場合は引数で渡された値を返す。
+引数は名前渡しなので、レシーバがNoneの場合のみ実行される。
+</p>
+
+
+
+<pre class="example">val cache = Map(1 -&gt; "one", 2 -&gt; "two")
+def heavyProcess(x:Int):String = {
+  Thread.sleep(3000)
+  x.toString
+}
+def getWithCache(x:Int):String = cache.get(x).getOrElse(heavyProcess(x))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-6-3" class="outline-4">
+<h4 id="sec-2-6-3"><span class="section-number-4">2.6.3</span> nullになりうるT型の値をOption[A]にする</h4>
+<div class="outline-text-4" id="text-2-6-3">
+
+<p>Option(x)とするとxがnullの場合None、それ以外はSome(x)になる
+</p>
+
+
+
+<pre class="example">val dict = Map(1 -&gt; "one", 2 -&gt; "two")
+import scala.collection.JavaConverters._
+val javaDict = dict.asJava
+
+javaDict.get(3)
+Option(javaDict.get(3))
+Option(javaDict.get(1))
+</pre>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-2-7" class="outline-3">
+<h3 id="sec-2-7"><span class="section-number-3">2.7</span> 演習</h3>
+<div class="outline-text-3" id="text-2-7">
+
+<p>下記のコードのgenerate_simpleとgenerate_complexをOptionを使って、リファクタリングしてください。
+紹介したメソッド以外にも便利なメソッドがあります。ScalaDocを参照してください。
+コードはgithubにあります。 → <a href="http://github.io/maedaunderscore/nascala-future/">http://github.io/maedaunderscore/nascala-future/</a>
+</p>
+
+
+
+<pre class="example">object Main {
+  sealed trait Emotion
+  case object Love extends Emotion
+  case object Hate extends Emotion
+
+  type User = String
+
+  class Conversation(
+    affinity: Map[(User, User), Emotion],
+    message: Map[(User, Emotion), String]
+  ){
+    def generate_simple(u1: User, u2: User): Option[String] = {
+      if(affinity.contains((u1, u2))){
+        val emotion = affinity((u1, u2))
+        if(message.contains((u1, emotion))){
+          Some(template(u1, u2, message((u1, emotion))))
+        } else None
+      } else None
+    }
+
+    def generate_complex(u1: User, u2: User): Option[String] = {
+      if(affinity.contains((u1, u2)) &amp;&amp; affinity.contains((u2, u1))){
+        val emotion1 = affinity((u1, u2))
+        val emotion2 = affinity((u2, u1))
+        if(emotion1 == emotion2) {
+          if(message.contains((u1, inverse(emotion1)))){
+            Some(template(u1, u2, message((u1, inverse(emotion1)))))
+          }else if(message.contains((u1, emotion1))){
+            Some(template(u1, u2, message((u1, emotion1))))
+          }else None
+        } else None
+      } else None
+    }
+
+    private def template(u1: User, u2: User, msg: String) = s"$u2「$msg？」\n$u1「$msg！」"
+
+    private def inverse(e: Emotion) = e match {
+      case Love =&gt; Hate
+      case Hate =&gt; Love
+    }
+  }
+}
+</pre>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-3" class="outline-2">
+<h2 id="sec-3"><span class="section-number-2">3</span> Try</h2>
+<div class="outline-text-2" id="text-3">
+
+
+</div>
+
+<div id="outline-container-3-1" class="outline-3">
+<h3 id="sec-3-1"><span class="section-number-3">3.1</span> 定義</h3>
+<div class="outline-text-3" id="text-3-1">
+
+
+
+
+
+<pre class="example">package scala.util
+
+sealed trait Try[+A]
+case class Success[+A](x: A)         extends Try[A]
+case class Failure[+A](ex: Throwable)  extends Try[A]
+</pre>
+
+
+<p>
+map, flatMap, filterはOptionと同じように使える。
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-3-2" class="outline-3">
+<h3 id="sec-3-2"><span class="section-number-3">3.2</span> 演習</h3>
+<div class="outline-text-3" id="text-3-2">
+
+<ol>
+<li>Try型のmap, flatMap,filterの動作を確認しましょう。
+
+</li>
+<li>Map[A,B]#get(key:A):Option[B]メソッドについて、戻り値がTry[B]のバージョンの関数を作りましょう。
+
+</li>
+<li>先のOptionの演習で、Optionの代わりにTryを使って、なぜ失敗したのかの理由を残すようにしましょう。
+</li>
+</ol>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-4" class="outline-2">
+<h2 id="sec-4"><span class="section-number-2">4</span> Future</h2>
+<div class="outline-text-2" id="text-4">
+
+
+</div>
+
+<div id="outline-container-4-1" class="outline-3">
+<h3 id="sec-4-1"><span class="section-number-3">4.1</span> Futureの値の作り方(ヘルパを使う)</h3>
+<div class="outline-text-3" id="text-4-1">
+
+
+
+
+<pre class="example">import scala.concurrent._
+
+// Future型の演算をする場合はExecutionContextの宣言が必要。
+import scala.concurrent.ExecutionContext.Implicits.global
+
+def x : Future[Int] = future {
+  val wait = scala.util.Random.nextInt(4) + 1
+  Thread.sleep(wait * 1000)
+  wait
+}
+
+// 同期して値を取得（うれしくない）
+import scala.concurrent.duration._
+Await.result(x, 10 seconds)  // 最大10秒待つ。
+
+
+// 非同期で処理(うれしい)
+// def onComplete(f: Try[A] =&gt; Unit):Unit
+x.onComplete(println)
+
+// map, flatMap, filterも非同期で動く
+x.map{x =&gt; s"it took ${x} seconds"}.onComplete(println) 
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-2" class="outline-3">
+<h3 id="sec-4-2"><span class="section-number-3">4.2</span> Futureの値の作り方（Promiseを使う）</h3>
+<div class="outline-text-3" id="text-4-2">
+
+<p>Promise[A]からFuture[A]を生成できる。Promise.successまたはPromise.failureに値を渡すと、
+生成したFutureの値が確定する
+</p>
+
+
+
+<pre class="example">val promise = Promise[Int]()
+val x = promise.future
+x.isCompleted
+promise.success(3)
+x.isCompleted
+x.value
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-3" class="outline-3">
+<h3 id="sec-4-3"><span class="section-number-3">4.3</span> 演習</h3>
+<div class="outline-text-3" id="text-4-3">
+
+<ol>
+<li>Future型のmap, flatMap, filterの動作を確認しましょう。
+
+</li>
+<li>Future型の値をunliftするにはどうすればよいですか？ Futureからunliftすることは何を意味しますか？
+
+</li>
+<li>Map#getメソッドについて、Future型で返すバージョンを作りましょう。
+   ランダム秒のsleepを入れて、非同期感を演出してください。
+
+</li>
+<li>先のTryの演習について、Tryの代わりにFutureを使って、非同期に処理をするようにしましょう。
+   Mapから値を取り出す際には、3.で作成した関数を使って時間がかかるようにしてください。
+   FutureはorElseメソッドはありません。２つのFutureを引数にして先に成功/失敗した方のFutureを返す関数を作って置き換えてください。
+
+</li>
+<li>4.について、どの処理が非同期に実行されるか、考えてみてください。
+   また、sleepの前後にログを仕込んで実際の動作を確認してください。
+</li>
+</ol>
+
+
+</div>
+</div>
+</div>
+</div>
+
+<div id="postamble">
+<p class="date">Date: 2013-12-09 17:58:31 JST</p>
+<p class="author">Author: Yasuyuki Maeda(@maeda_)</p>
+<p class="creator">Org version 7.8.11 with Emacs version 24</p>
+<a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
+
+</div>
+</body>
+</html>
